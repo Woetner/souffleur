@@ -164,18 +164,51 @@ async function callGemini(apiKey: string, model: string, voice: string, prompt: 
 }
 
 /** Try the chosen model, then fall back to other models if it does not exist */
+// Google counts limits per model, so when one model's daily limit is used up we try the next.
+const exhausted = new Map<string, number>() // model -> time we hit its daily limit
+const isExhausted = (m: string) => {
+  const t = exhausted.get(m)
+  return t !== undefined && Date.now() - t < 60 * 60 * 1000 // try again after an hour
+}
+
+/** Try the chosen model, then the other models if it does not exist or its daily limit is used up */
 export async function synthGemini(settings: Settings, voice: string, prompt: string, signal?: AbortSignal): Promise<Blob> {
-  const order = [settings.model, ...TTS_MODELS.map((m) => m.id).filter((m) => m !== settings.model)]
-  let last: unknown
+  const all = [settings.model, ...TTS_MODELS.map((m) => m.id).filter((m) => m !== settings.model)]
+  const order = all.filter((m) => !isExhausted(m))
+  let last: unknown = new TtsError('daily', 'Het daglimiet van Google is voor alle stemmodellen bereikt.')
   for (const model of order) {
     try {
       return await callGemini(settings.apiKey, model, voice, prompt, signal, settings.keyPlan === 'paid')
     } catch (e) {
       last = e
-      if (!(e instanceof TtsError) || e.kind !== 'model') throw e
+      if (!(e instanceof TtsError)) throw e
+      if (e.kind === 'daily') exhausted.set(model, Date.now())
+      else if (e.kind !== 'model') throw e
     }
   }
   throw last
+}
+
+export interface ModelCheck {
+  model: string
+  label: string
+  ok: boolean
+  message: string
+}
+
+/** Ask every voice model for one word, to see which ones this key may use and why not */
+export async function diagnoseKey(settings: Settings): Promise<ModelCheck[]> {
+  const out: ModelCheck[] = []
+  for (const m of TTS_MODELS) {
+    try {
+      await callGemini(settings.apiKey, m.id, 'Kore', 'Hallo.', undefined, settings.keyPlan === 'paid')
+      exhausted.delete(m.id)
+      out.push({ model: m.id, label: m.label, ok: true, message: 'Werkt' })
+    } catch (e) {
+      out.push({ model: m.id, label: m.label, ok: false, message: e instanceof Error ? e.message : String(e) })
+    }
+  }
+  return out
 }
 
 export function charFor(script: Script, line: Line): Character | undefined {
@@ -257,7 +290,7 @@ export async function prepareLines(
     }
   }
   // A paid key has much higher rate limits, so load more lines at the same time
-  const n = settings.keyPlan === 'paid' ? 6 : 2
+  const n = settings.keyPlan === 'paid' ? 4 : 2
   await Promise.all(Array.from({ length: n }, () => worker()))
   return { done, total, error }
 }

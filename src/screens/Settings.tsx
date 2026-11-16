@@ -8,7 +8,7 @@ import Icon from '../components/Icon'
 import { useApp } from '../state'
 import type { Emotion, TextSize, Theme, VoiceEngine } from '../types'
 import { clearEverything, storageEstimate } from '../lib/storage'
-import { testKey, TTS_MODELS } from '../lib/tts'
+import { diagnoseKey, testKey, TTS_MODELS, type ModelCheck } from '../lib/tts'
 import { errText, itemVariants, listVariants, playBlob, Seg } from './ui'
 
 function Group({ title, children }: { title: string; children: ReactNode }) {
@@ -111,6 +111,18 @@ export default function SettingsScreen() {
     }
   }
 
+  const [checks, setChecks] = useState<ModelCheck[] | null>(null)
+  const [checking, setChecking] = useState(false)
+  const diagnose = async () => {
+    setChecking(true)
+    setChecks(null)
+    try {
+      setChecks(await diagnoseKey(settings))
+    } finally {
+      setChecking(false)
+    }
+  }
+
   const wipe = async () => {
     await clearEverything()
     location.hash = '#/'
@@ -182,6 +194,19 @@ export default function SettingsScreen() {
                   </span>
                 </div>
                 {settings.apiKey && <UsageBar />}
+                {settings.apiKey && (
+                  <div className="stack" style={{ gap: 8 }}>
+                    <button className="btn block" disabled={checking} onClick={diagnose}>
+                      {checking ? 'Bezig met controleren…' : 'Controleer alle stemmodellen'}
+                    </button>
+                    {checks?.map((c) => (
+                      <div key={c.model} className={c.ok ? 'card small' : 'error small'} style={{ padding: 12 }}>
+                        <b>{c.ok ? '✓' : '✗'} {c.label}</b>
+                        <div style={{ overflowWrap: 'anywhere' }}>{c.message}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <div className="field">
                   <label htmlFor="st-model">Stemmodel</label>
                   <select id="st-model" className="input" value={settings.model} onChange={(e) => updateSettings({ model: e.target.value })}>
@@ -297,7 +322,7 @@ export default function SettingsScreen() {
         </Group>
 
         <p className="muted small" style={{ textAlign: 'center' }}>
-          Souffleur v0.5 · {__BUILD__}
+          Souffleur v0.6 · {__BUILD__}
         </p>
       </motion.div>
     </Screen>
