@@ -50,7 +50,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const toast = useCallback((msg: string) => {
     setToastMsg(msg)
-    window.setTimeout(() => setToastMsg((m) => (m === msg ? null : m)), 3200)
+    window.setTimeout(() => setToastMsg((m) => (m === msg ? null : m)), Math.max(3200, msg.length * 55))
   }, [])
 
   const value = useMemo(() => ({ settings, updateSettings, scripts, saveScript, removeScript, toast }), [settings, updateSettings, scripts, saveScript, removeScript, toast])

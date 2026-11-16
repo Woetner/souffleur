@@ -5,6 +5,7 @@ import { Screen, TopBar } from '../components/Screen'
 import Icon from '../components/Icon'
 import { useApp } from '../state'
 import { testKey } from '../lib/tts'
+import { clearLimitFlag } from '../lib/usage'
 import { errText, itemVariants, listVariants, playBlob } from './ui'
 
 export default function KeyHelp() {
@@ -132,7 +133,10 @@ export default function KeyHelp() {
               </span>
             </li>
           </ol>
-          <button className="btn block" onClick={() => updateSettings({ keyPlan: 'paid' })} disabled={settings.keyPlan === 'paid'}>
+          <button className="btn block" onClick={() => {
+              updateSettings({ keyPlan: 'paid' })
+              clearLimitFlag()
+            }} disabled={settings.keyPlan === 'paid'}>
             {settings.keyPlan === 'paid' ? 'Betaald staat aan' : 'Ik heb betalen aangezet'}
           </button>
         </motion.div>

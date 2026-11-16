@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Screen, TopBar } from '../components/Screen'
 import UsageBar from '../components/UsageBar'
+import { clearLimitFlag } from '../lib/usage'
 import Icon from '../components/Icon'
 import { useApp } from '../state'
 import type { Emotion, TextSize, Theme, VoiceEngine } from '../types'
@@ -162,7 +163,10 @@ export default function SettingsScreen() {
                   <Seg<'free' | 'paid'>
                     label="Soort sleutel"
                     value={settings.keyPlan}
-                    onChange={(v) => updateSettings({ keyPlan: v })}
+                    onChange={(v) => {
+                      updateSettings({ keyPlan: v })
+                      if (v === 'paid') clearLimitFlag()
+                    }}
                     options={[
                       ['free', 'Gratis'],
                       ['paid', 'Betaald'],
@@ -293,7 +297,7 @@ export default function SettingsScreen() {
         </Group>
 
         <p className="muted small" style={{ textAlign: 'center' }}>
-          Souffleur v0.4 · {__BUILD__}
+          Souffleur v0.5 · {__BUILD__}
         </p>
       </motion.div>
     </Screen>

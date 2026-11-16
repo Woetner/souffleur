@@ -102,7 +102,7 @@ export class TtsError extends Error {
 let steadyUnsupported = false
 const voiceSeed = (voice: string) => [...voice].reduce((a, c) => (a * 31 + c.charCodeAt(0)) % 100000, 7)
 
-async function callGemini(apiKey: string, model: string, voice: string, prompt: string, signal?: AbortSignal): Promise<Blob> {
+async function callGemini(apiKey: string, model: string, voice: string, prompt: string, signal?: AbortSignal, paid = false): Promise<Blob> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`
   const steady = !steadyUnsupported
   let res: Response
@@ -132,7 +132,7 @@ async function callGemini(apiKey: string, model: string, voice: string, prompt: 
     const msg: string = json?.error?.message ?? res.statusText
     if (steady && res.status === 400 && /temperature|seed|language|Unknown name|not supported|Invalid JSON/i.test(msg)) {
       steadyUnsupported = true
-      return callGemini(apiKey, model, voice, prompt, signal)
+      return callGemini(apiKey, model, voice, prompt, signal, paid)
     }
     if (res.status === 400 && /api key|API_KEY/i.test(msg)) throw new TtsError('key', 'De Google-sleutel klopt niet.')
     if (res.status === 403) throw new TtsError('key', 'De Google-sleutel heeft geen toegang. Maak een nieuwe sleutel in Google AI Studio.')
@@ -141,7 +141,15 @@ async function callGemini(apiKey: string, model: string, voice: string, prompt: 
       const details = JSON.stringify(json?.error?.details ?? '')
       const m = /"retryDelay":"(\d+(?:\.\d+)?)s"/.exec(details)
       const daily = /PerDay|per day|daily/i.test(details + msg)
-      if (daily) recordDailyLimit()
+      const freeTier = /free_?tier|FreeTier/i.test(details + msg)
+      if (daily && !paid) recordDailyLimit()
+      if (daily && paid && freeTier)
+        throw new TtsError(
+          'daily',
+          'Google behandelt deze sleutel nog als gratis sleutel, en het gratis daglimiet is op. Kijk in Google AI Studio bij API keys: bij deze sleutel moet een betaald niveau staan (bijv. "Tier 1"), niet "Free tier". Na het aanzetten van betalen kan het tot zo’n 10 minuten duren.' +
+            ` (Google: ${msg.slice(0, 140)})`,
+        )
+      if (daily && paid) throw new TtsError('daily', `Google meldt een daglimiet, ook met betalen aan. (Google: ${msg.slice(0, 160)})`)
       throw new TtsError(daily ? 'daily' : 'quota', daily ? 'Het gratis daglimiet van Google is bereikt.' : 'Even te veel tegelijk, we wachten kort.', m ? parseFloat(m[1]) * 1000 : 20000)
     }
     throw new TtsError('other', `Google gaf een fout: ${msg}`)
@@ -161,7 +169,7 @@ export async function synthGemini(settings: Settings, voice: string, prompt: str
   let last: unknown
   for (const model of order) {
     try {
-      return await callGemini(settings.apiKey, model, voice, prompt, signal)
+      return await callGemini(settings.apiKey, model, voice, prompt, signal, settings.keyPlan === 'paid')
     } catch (e) {
       last = e
       if (!(e instanceof TtsError) || e.kind !== 'model') throw e

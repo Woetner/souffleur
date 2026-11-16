@@ -87,3 +87,4 @@ input[type='range'] { width: 100%; accent-color: var(--accent); min-height: 40px
 .steps li::before { counter-increment: s; content: counter(s); width: 36px; height: 36px; flex-shrink: 0; border-radius: 50%; background: var(--accent); color: #fff; display: grid; place-items: center; font-weight: 700; }
 .hero-ring { --accent: #fff; --bg-sunk: rgb(255 255 255 / 22%); color: #fff; }
 .onb-track { position: relative; }
+.error { overflow-wrap: anywhere; }

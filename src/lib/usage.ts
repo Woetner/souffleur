@@ -67,9 +67,17 @@ function rollover() {
 export function recordRequest(chars: number, seconds: number, model: string) {
   rollover()
   const cost = ((seconds * 25) / 1e6) * priceFor(model) + (chars / 4 / 1e6) * 1
-  state = { ...state, requests: state.requests + 1, chars: state.chars + chars, costUsd: (state.costUsd ?? 0) + cost }
+  // A request that works means we are not blocked (anymore)
+  state = { ...state, requests: state.requests + 1, chars: state.chars + chars, costUsd: (state.costUsd ?? 0) + cost, hitLimit: false }
   session++
   sessionCost += cost
+  save()
+}
+
+/** Forget a remembered "limit reached", e.g. after switching to a paid key */
+export function clearLimitFlag() {
+  rollover()
+  state = { ...state, hitLimit: false }
   save()
 }
 
