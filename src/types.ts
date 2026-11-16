@@ -77,6 +77,7 @@ export interface Settings {
   speed: number
   cuePause: number // ms of silence before we accept she finished
   useMic: boolean
+  keyPlan: 'free' | 'paid'
   onboarded: boolean
   practiceTipsSeen: boolean
   streakDays: string[] // ISO dates practised

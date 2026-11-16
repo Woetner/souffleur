@@ -146,12 +146,12 @@ async function callGemini(apiKey: string, model: string, voice: string, prompt: 
     }
     throw new TtsError('other', `Google gaf een fout: ${msg}`)
   }
-  recordRequest(prompt.length)
   const audio = findAudio(json)
   if (!audio) throw new TtsError('other', 'Google gaf geen geluid terug.')
   const bytes = b64ToBytes(audio.data)
-  if (/wav/i.test(audio.mime)) return new Blob([bytes as BlobPart], { type: 'audio/wav' })
   const rate = parseInt(/rate=(\d+)/.exec(audio.mime)?.[1] ?? '24000', 10)
+  recordRequest(prompt.length, bytes.length / 2 / rate, model)
+  if (/wav/i.test(audio.mime)) return new Blob([bytes as BlobPart], { type: 'audio/wav' })
   return pcmToWav(bytes, rate)
 }
 
@@ -248,7 +248,9 @@ export async function prepareLines(
       }
     }
   }
-  await Promise.all([worker(), worker()])
+  // A paid key has much higher rate limits, so load more lines at the same time
+  const n = settings.keyPlan === 'paid' ? 6 : 2
+  await Promise.all(Array.from({ length: n }, () => worker()))
   return { done, total, error }
 }
 

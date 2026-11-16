@@ -12,11 +12,26 @@ interface Usage {
   day: string // Pacific date
   requests: number
   chars: number
+  costUsd: number
   limit?: number // learned
   hitLimit: boolean
 }
 
 let session = 0
+let sessionCost = 0
+
+// Gemini audio is billed per output token: 25 tokens per second of audio (USD per 1M tokens)
+export const AUDIO_PRICE: Record<string, number> = {
+  'gemini-3.8-flash-tts': 9,
+  'gemini-3.8-flash-lite-tts': 6,
+  'gemini-2.5-flash-preview-tts': 10,
+}
+const priceFor = (model: string) => {
+  const p = AUDIO_PRICE[model] ?? 10
+  // Google doubles the 3.8 prices from 1 January 2027
+  return model.startsWith('gemini-3.8') && new Date() >= new Date('2027-01-01') ? p * 2 : p
+}
+export const USD_TO_EUR = 0.92
 let state: Usage = load()
 const subs = new Set<() => void>()
 
@@ -31,7 +46,7 @@ function load(): Usage {
   } catch {
     /* ignore */
   }
-  return { day: pacificDay(), requests: 0, chars: 0, hitLimit: false }
+  return { day: pacificDay(), requests: 0, chars: 0, costUsd: 0, hitLimit: false }
 }
 
 function save() {
@@ -46,13 +61,15 @@ function save() {
 
 function rollover() {
   const today = pacificDay()
-  if (state.day !== today) state = { day: today, requests: 0, chars: 0, limit: state.limit, hitLimit: false }
+  if (state.day !== today) state = { day: today, requests: 0, chars: 0, costUsd: 0, limit: state.limit, hitLimit: false }
 }
 
-export function recordRequest(chars: number) {
+export function recordRequest(chars: number, seconds: number, model: string) {
   rollover()
-  state = { ...state, requests: state.requests + 1, chars: state.chars + chars }
+  const cost = ((seconds * 25) / 1e6) * priceFor(model) + (chars / 4 / 1e6) * 1
+  state = { ...state, requests: state.requests + 1, chars: state.chars + chars, costUsd: (state.costUsd ?? 0) + cost }
   session++
+  sessionCost += cost
   save()
 }
 
@@ -70,6 +87,8 @@ export interface UsageView {
   session: number
   hitLimit: boolean
   resetAt: string // local time, e.g. "09:00"
+  costEur: number // today
+  sessionCostEur: number
 }
 
 let snapshot: UsageView | null = null
@@ -93,6 +112,8 @@ export function getUsage(): UsageView {
     estimated: !state.limit,
     session,
     hitLimit: state.hitLimit,
+    costEur: (state.costUsd ?? 0) * USD_TO_EUR,
+    sessionCostEur: sessionCost * USD_TO_EUR,
     resetAt: reset.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' }),
   }
   return snapshot

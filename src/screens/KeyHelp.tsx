@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion'
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Screen, TopBar } from '../components/Screen'
 import Icon from '../components/Icon'
 import { useApp } from '../state'
@@ -10,6 +10,11 @@ import { errText, itemVariants, listVariants, playBlob } from './ui'
 export default function KeyHelp() {
   const nav = useNavigate()
   const { settings, updateSettings, toast } = useApp()
+  const loc = useLocation()
+  useEffect(() => {
+    const id = (loc.state as { scrollTo?: string } | null)?.scrollTo
+    if (id) setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 350)
+  }, [loc.state])
   const [key, setKey] = useState(settings.apiKey)
   const [show, setShow] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -95,6 +100,41 @@ export default function KeyHelp() {
               Klaar, naar het begin
             </button>
           )}
+        </motion.div>
+
+        <motion.div variants={itemVariants} className="card stack" id="betaald">
+          <h3>Liever geen daglimiet? Betaalde sleutel</h3>
+          <p className="muted small">
+            Dezelfde sleutel wordt betaald zodra je in Google AI Studio betalen aanzet. Je hoeft in de app dan alleen "Betaald" te kiezen. Een heel toneelstuk kost
+            ongeveer € 0,65 (vanaf januari 2027 ongeveer € 1,30), en daarna niets meer, omdat de stemmen bewaard worden.
+          </p>
+          <ol className="steps small">
+            <li>
+              <span>
+                Open{' '}
+                <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer">
+                  aistudio.google.com/apikey
+                </a>
+                . Bij je sleutel staat <b>"Set up billing"</b> (of "Free tier"). Tik daarop.
+              </span>
+            </li>
+            <li>
+              <span>Voeg een betaalmethode toe in het Google Cloud-scherm dat opent (creditcard of bankpas) en bevestig.</span>
+            </li>
+            <li>
+              <span>
+                Tip: stel in Google Cloud bij <b>Budgets & alerts</b> een budget in, bijvoorbeeld € 5 per maand, dan krijg je een mail als het meer wordt.
+              </span>
+            </li>
+            <li>
+              <span>
+                Kies in de app bij <b>Instellingen → Soort sleutel</b> voor <b>Betaald</b>.
+              </span>
+            </li>
+          </ol>
+          <button className="btn block" onClick={() => updateSettings({ keyPlan: 'paid' })} disabled={settings.keyPlan === 'paid'}>
+            {settings.keyPlan === 'paid' ? 'Betaald staat aan' : 'Ik heb betalen aangezet'}
+          </button>
         </motion.div>
 
         <motion.div variants={itemVariants} className="card stack small" style={{ background: 'var(--bg-sunk)', boxShadow: 'none' }}>

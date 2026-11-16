@@ -14,6 +14,7 @@ export const DEFAULT_SETTINGS: Settings = {
   speed: 1,
   cuePause: 1200,
   useMic: true,
+  keyPlan: 'free',
   onboarded: false,
   practiceTipsSeen: false,
   streakDays: [],

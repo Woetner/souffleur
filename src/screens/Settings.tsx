@@ -157,6 +157,26 @@ export default function SettingsScreen() {
                     Hoe kom ik aan een gratis sleutel?
                   </button>
                 </div>
+                <div className="field">
+                  <label>Soort sleutel</label>
+                  <Seg<'free' | 'paid'>
+                    label="Soort sleutel"
+                    value={settings.keyPlan}
+                    onChange={(v) => updateSettings({ keyPlan: v })}
+                    options={[
+                      ['free', 'Gratis'],
+                      ['paid', 'Betaald'],
+                    ]}
+                  />
+                  <span className="muted small">
+                    {settings.keyPlan === 'paid'
+                      ? 'Geen daglimiet en sneller laden. Kost ongeveer € 0,65 per toneelstuk (vanaf januari ± € 1,30), één keer.'
+                      : 'Gratis met een daglimiet. Een heel stuk laden kan een dag of twee duren.'}{' '}
+                    <button className="link-btn" onClick={() => nav('/sleutel', { state: { scrollTo: 'betaald' } })}>
+                      Hoe zet ik betalen aan?
+                    </button>
+                  </span>
+                </div>
                 {settings.apiKey && <UsageBar />}
                 <div className="field">
                   <label htmlFor="st-model">Stemmodel</label>
@@ -273,7 +293,7 @@ export default function SettingsScreen() {
         </Group>
 
         <p className="muted small" style={{ textAlign: 'center' }}>
-          Souffleur v0.3 · {__BUILD__}
+          Souffleur v0.4 · {__BUILD__}
         </p>
       </motion.div>
     </Screen>
