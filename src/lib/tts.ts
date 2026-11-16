@@ -1,5 +1,6 @@
 import type { Character, Line, Script, Settings } from '../types'
 import { getAudio, putAudio } from './storage'
+import { recordDailyLimit, recordRequest } from './usage'
 
 export const TTS_MODELS = [
   { id: 'gemini-3.8-flash-tts', label: 'Gemini Flash (beste kwaliteit)' },
@@ -28,8 +29,10 @@ async function sha(s: string): Promise<string> {
   }
 }
 
+// Bump when the way audio is made changes, so old (inconsistent) audio is not reused
+const AUDIO_VERSION = 'v3-steady'
 export async function audioKey(model: string, voice: string, prompt: string) {
-  return sha(`${model}|${voice}|${prompt}`)
+  return sha(`${AUDIO_VERSION}|${model}|${voice}|${prompt}`)
 }
 
 function b64ToBytes(b64: string): Uint8Array {
@@ -94,8 +97,14 @@ export class TtsError extends Error {
   }
 }
 
+// Fixed sampling per voice, so a character sounds the same in every line.
+// If a model rejects these extra fields we drop them once and remember that.
+let steadyUnsupported = false
+const voiceSeed = (voice: string) => [...voice].reduce((a, c) => (a * 31 + c.charCodeAt(0)) % 100000, 7)
+
 async function callGemini(apiKey: string, model: string, voice: string, prompt: string, signal?: AbortSignal): Promise<Blob> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`
+  const steady = !steadyUnsupported
   let res: Response
   try {
     res = await fetch(url, {
@@ -106,7 +115,11 @@ async function callGemini(apiKey: string, model: string, voice: string, prompt: 
         contents: [{ parts: [{ text: prompt }] }],
         generationConfig: {
           responseModalities: ['AUDIO'],
-          speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } },
+          ...(steady ? { temperature: 0.4, seed: voiceSeed(voice) } : {}),
+          speechConfig: {
+            ...(steady ? { languageCode: 'nl-NL' } : {}),
+            voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } },
+          },
         },
       }),
     })
@@ -117,6 +130,10 @@ async function callGemini(apiKey: string, model: string, voice: string, prompt: 
   const json = await res.json().catch(() => ({}))
   if (!res.ok) {
     const msg: string = json?.error?.message ?? res.statusText
+    if (steady && res.status === 400 && /temperature|seed|language|Unknown name|not supported|Invalid JSON/i.test(msg)) {
+      steadyUnsupported = true
+      return callGemini(apiKey, model, voice, prompt, signal)
+    }
     if (res.status === 400 && /api key|API_KEY/i.test(msg)) throw new TtsError('key', 'De Google-sleutel klopt niet.')
     if (res.status === 403) throw new TtsError('key', 'De Google-sleutel heeft geen toegang. Maak een nieuwe sleutel in Google AI Studio.')
     if (res.status === 404) throw new TtsError('model', `Stemmodel "${model}" niet gevonden.`)
@@ -124,10 +141,12 @@ async function callGemini(apiKey: string, model: string, voice: string, prompt: 
       const details = JSON.stringify(json?.error?.details ?? '')
       const m = /"retryDelay":"(\d+(?:\.\d+)?)s"/.exec(details)
       const daily = /PerDay|per day|daily/i.test(details + msg)
+      if (daily) recordDailyLimit()
       throw new TtsError(daily ? 'daily' : 'quota', daily ? 'Het gratis daglimiet van Google is bereikt.' : 'Even te veel tegelijk, we wachten kort.', m ? parseFloat(m[1]) * 1000 : 20000)
     }
     throw new TtsError('other', `Google gaf een fout: ${msg}`)
   }
+  recordRequest(prompt.length)
   const audio = findAudio(json)
   if (!audio) throw new TtsError('other', 'Google gaf geen geluid terug.')
   const bytes = b64ToBytes(audio.data)

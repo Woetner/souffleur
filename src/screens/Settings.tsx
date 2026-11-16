@@ -2,6 +2,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Screen, TopBar } from '../components/Screen'
+import UsageBar from '../components/UsageBar'
 import Icon from '../components/Icon'
 import { useApp } from '../state'
 import type { Emotion, TextSize, Theme, VoiceEngine } from '../types'
@@ -156,6 +157,7 @@ export default function SettingsScreen() {
                     Hoe kom ik aan een gratis sleutel?
                   </button>
                 </div>
+                {settings.apiKey && <UsageBar />}
                 <div className="field">
                   <label htmlFor="st-model">Stemmodel</label>
                   <select id="st-model" className="input" value={settings.model} onChange={(e) => updateSettings({ model: e.target.value })}>
@@ -271,7 +273,7 @@ export default function SettingsScreen() {
         </Group>
 
         <p className="muted small" style={{ textAlign: 'center' }}>
-          Souffleur v0.2 · {__BUILD__}
+          Souffleur v0.3 · {__BUILD__}
         </p>
       </motion.div>
     </Screen>

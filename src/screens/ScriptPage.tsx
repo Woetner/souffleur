@@ -7,8 +7,10 @@ import { useApp } from '../state'
 import type { Character, DirectionsMode, Line, Part, Script, TextMode } from '../types'
 import { displayName, isMine } from '../lib/parser'
 import { resplit } from '../lib/scriptFactory'
-import { cachedLineAudio, prepareLines } from '../lib/tts'
-import { errText, itemVariants, listVariants, medal, MEDAL_LABEL, Seg, useVoiceSample, VoiceSelect } from './ui'
+import { cachedLineAudio } from '../lib/tts'
+import { startPrep, stopPrep, usePrep } from '../lib/prepJob'
+import UsageBar from '../components/UsageBar'
+import { itemVariants, listVariants, medal, MEDAL_LABEL, Seg, useVoiceSample, VoiceSelect } from './ui'
 
 type Filter = 'all' | 'mine' | 'todo'
 
@@ -75,21 +77,26 @@ function PartRow({ s, p }: { s: Script; p: Part }) {
 function Voices({ s, others }: { s: Script; others: Line[] }) {
   const nav = useNavigate()
   const { settings, toast } = useApp()
+  const prep = usePrep()
   const [cached, setCached] = useState<number | null>(null)
-  const [prog, setProg] = useState<{ done: number; total: number } | null>(null)
-  const [err, setErr] = useState('')
-  const abort = useRef<AbortController | null>(null)
   const hasKey = settings.engine === 'gemini' && !!settings.apiKey
+  const mine = prep.scriptId === s.id
+  const running = mine && prep.running
 
   useEffect(() => {
-    if (!hasKey) return
+    if (!hasKey || running) return
     let live = true
     Promise.all(others.map((l) => cachedLineAudio(s, l, settings))).then((r) => live && setCached(r.filter(Boolean).length))
     return () => {
       live = false
     }
-  }, [s, others, settings, hasKey])
-  useEffect(() => () => abort.current?.abort(), [])
+  }, [s, others, settings, hasKey, running])
+
+  const wasRunning = useRef(false)
+  useEffect(() => {
+    if (wasRunning.current && !running && mine && !prep.error && prep.done === prep.total) toast('Alle stemmen zijn klaar!')
+    wasRunning.current = running
+  }, [running, mine, prep, toast])
 
   if (!hasKey)
     return (
@@ -103,51 +110,46 @@ function Voices({ s, others }: { s: Script; others: Line[] }) {
       </motion.button>
     )
 
-  const run = async () => {
-    const ac = new AbortController()
-    abort.current = ac
-    setErr('')
-    setProg({ done: 0, total: others.length })
-    const r = await prepareLines(s, others, settings, (done, total) => setProg({ done, total }), ac.signal)
-    abort.current = null
-    setCached(r.done)
-    setProg(null)
-    if (r.error) setErr(r.error.message + (r.error.kind === 'daily' ? ' Morgen kun je verder; wat al klaar is blijft bewaard.' : ''))
-    else if (!ac.signal.aborted) toast('Alle stemmen zijn klaar!')
-  }
+  const done = running ? prep.done : (cached ?? 0)
+  const total = others.length
+  const allDone = cached === total && !running
+  const err = mine && !running ? prep.error : undefined
 
   return (
     <div className="card stack">
-      <p>
-        <b>{cached ?? '…'}</b> van de <b>{others.length}</b> regels van je tegenspelers zijn al ingesproken en bewaard.
-      </p>
-      {prog ? (
-        <>
-          <div className="bar">
-            <div style={{ width: `${prog.total ? (prog.done / prog.total) * 100 : 0}%` }} />
-          </div>
-          <div className="row">
-            <span className="grow muted small">
-              Bezig: {prog.done} / {prog.total}
-            </span>
-            <button className="btn small-btn" onClick={() => abort.current?.abort()}>
-              Stoppen
-            </button>
-          </div>
-        </>
-      ) : (
-        cached !== others.length && (
-          <button className="btn primary block" onClick={() => run().catch((e) => setErr(errText(e)))}>
-            <Icon name="sparkle" /> Alle stemmen nu maken
+      <div className="row" style={{ justifyContent: 'space-between' }}>
+        <b>Stemmen klaarzetten</b>
+        <span className="muted small">
+          {cached === null && !running ? '…' : `${done} / ${total}`}
+        </span>
+      </div>
+      <div className="bar">
+        <div style={{ width: `${total ? (done / total) * 100 : 0}%`, background: allDone ? 'var(--good)' : undefined }} />
+      </div>
+      {allDone ? (
+        <p className="muted small">
+          <Icon name="check" size={16} /> Alle zinnen van je tegenspelers staan klaar op dit toestel. Oefenen gaat zonder wachten en kost niets.
+        </p>
+      ) : running ? (
+        <div className="row">
+          <span className="grow muted small">Bezig met inspreken. Je kunt gewoon verder in de app; dit gaat door.</span>
+          <button className="btn small-btn" onClick={stopPrep}>
+            Pauzeren
           </button>
-        )
+        </div>
+      ) : (
+        <button className="btn primary block" disabled={prep.running} onClick={() => startPrep(s, settings)}>
+          <Icon name="sparkle" /> {done > 0 ? `Verder laden (nog ${total - done})` : 'Alle zinnen nu laden'}
+        </button>
       )}
       {err && (
         <div className="error" role="alert">
-          {err}
+          {err.message}
+          {err.kind === 'daily' ? ' Wat al klaar is blijft bewaard; later verder laden gaat vanaf waar je was.' : ''}
         </div>
       )}
-      <p className="muted small">Klaarmaken hoeft niet: tijdens het oefenen worden regels ook vanzelf ingesproken. Vooraf maken voorkomt wachten.</p>
+      <UsageBar compact />
+      <p className="muted small">Elke zin wordt één keer ingesproken en bewaard. Stoppen mag altijd: je gaat later verder waar je was.</p>
     </div>
   )
 }
@@ -273,6 +275,8 @@ export default function ScriptPage() {
         {s.isDemo && <span className="chip">Oefenscène</span>}
       </div>
 
+      <Voices s={s} others={others} />
+
       <h2 className="section-title">Oefenstukken</h2>
       <div className="chips" role="group" aria-label="Filter">
         {(
@@ -322,9 +326,6 @@ export default function ScriptPage() {
             </div>
           ))}
       </div>
-
-      <h2 className="section-title">Stemmen</h2>
-      <Voices s={s} others={others} />
 
       <Collapsible title="Instellingen voor dit script" icon="settings">
         <div className="field">

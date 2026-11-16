@@ -1,6 +1,8 @@
 import { motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { ProgressRing, Screen } from '../components/Screen'
+import UsageBar from '../components/UsageBar'
+import { usePrep } from '../lib/prepJob'
 import Icon, { type IconName } from '../components/Icon'
 import { streakCount, useApp } from '../state'
 import { makeDemo } from '../lib/demo'
@@ -20,6 +22,7 @@ function weekMinutes(byDay: Record<string, number>): number {
 export default function Home() {
   const nav = useNavigate()
   const { scripts, settings, saveScript } = useApp()
+  const prep = usePrep()
   const recent = scripts?.[0]
   const streak = streakCount(settings.streakDays)
   const minutes = weekMinutes(settings.minutesByDay)
@@ -118,6 +121,17 @@ export default function Home() {
             </motion.button>
           ))}
         </motion.div>
+
+        {settings.engine === 'gemini' && settings.apiKey && (
+          <motion.div variants={itemVariants} className="card stack">
+            <UsageBar />
+            {prep.running && (
+              <span className="muted small">
+                Stemmen laden: {prep.done} / {prep.total}
+              </span>
+            )}
+          </motion.div>
+        )}
 
         <motion.div variants={itemVariants} className="stats">
           <div className="stat">
