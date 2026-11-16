@@ -7,25 +7,25 @@ export const TTS_MODELS = [
   { id: 'gemini-2.5-flash-preview-tts', label: 'Gemini 2.5 Flash (oudere versie)' },
 ]
 
-const EMOTION_TEXT: Record<Settings['emotion'], string> = {
-  calm: 'Speak naturally and calmly, with very little acting.',
-  some: 'Act it lightly: a natural, believable tone with subtle emotion, never exaggerated.',
-  lots: 'Act it expressively, like a lively stage actor.',
+const TONE: Record<Settings['emotion'], string> = {
+  calm: 'calmly and naturally',
+  some: 'naturally, with a little emotion',
+  lots: 'expressively, like a stage actor',
 }
 
-export function buildPrompt(char: Character | undefined, line: Line, emotion: Settings['emotion'], context = ''): string {
-  const who = char ? `${char.name}${char.persona ? ` (${char.persona})` : ''}` : 'a narrator'
-  const hints = [...(line.directions ?? [])]
-  const parts = [
-    `You are voicing a character in a Dutch amateur theatre play${context ? ` (${context})` : ''}.`,
-    `Character: ${who}.`,
-    EMOTION_TEXT[emotion],
-  ]
-  if (hints.length) parts.push(`Stage direction for this line (only for tone, do not read it): ${hints.join('; ')}.`)
-  if (line.note) parts.push(`Director's note: ${line.note}.`)
-  parts.push('Read only the following Dutch line aloud, in Dutch, and nothing else:')
-  parts.push(line.text)
-  return parts.join('\n')
+/**
+ * Gemini TTS reads long instructions out loud. It only treats a short style prefix as direction,
+ * in the form Google documents: "Say cheerfully: Have a wonderful day!". So keep it to one short
+ * line: tone + optional mood words from the stage direction or the user's note, then the text.
+ */
+export function buildPrompt(_char: Character | undefined, line: Line, emotion: Settings['emotion'], _context = ''): string {
+  // Stage directions are Dutch fragments the model may read aloud, so only use them at "Veel emotie"
+  const moods = [line.note, ...(emotion === 'lots' ? line.directions ?? [] : [])]
+    .filter((d): d is string => !!d && d.length <= 40)
+    .slice(0, 2)
+    .map((d) => d.replace(/[:"]/g, '').trim())
+  const mood = moods.length ? ` (mood: ${moods.join(', ')})` : ''
+  return `Say in Dutch, ${TONE[emotion]}${mood}: ${line.text}`
 }
 
 async function sha(s: string): Promise<string> {
@@ -288,5 +288,5 @@ export function browserSpeak(text: string, char: Character | undefined, rate: nu
 
 /** Quick test of a key: voices one short sentence */
 export async function testKey(settings: Settings): Promise<Blob> {
-  return synthGemini(settings, 'Kore', 'Read aloud in Dutch, warmly: Hallo! Wat leuk dat je komt repeteren.')
+  return synthGemini(settings, 'Kore', 'Say in Dutch, warmly: Hallo! Wat leuk dat je komt repeteren.')
 }
