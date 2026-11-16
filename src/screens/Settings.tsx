@@ -271,7 +271,7 @@ export default function SettingsScreen() {
         </Group>
 
         <p className="muted small" style={{ textAlign: 'center' }}>
-          Souffleur v0.1
+          Souffleur v0.2 · {__BUILD__}
         </p>
       </motion.div>
     </Screen>
