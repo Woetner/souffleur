@@ -271,8 +271,15 @@ export function browserSpeak(text: string, char: Character | undefined, rate: nu
   u.pitch = char?.pitch ?? 1
   u.rate = rate
   const done = new Promise<void>((resolve) => {
-    u.onend = () => resolve()
-    u.onerror = () => resolve()
+    // Some browsers never fire onend; resolve after a generous estimate as a safety net
+    const words = text.split(/\s+/).length
+    const t = setTimeout(resolve, (1500 + words * 550) / Math.max(0.5, rate))
+    const end = () => {
+      clearTimeout(t)
+      resolve()
+    }
+    u.onend = end
+    u.onerror = end
   })
   speechSynthesis.cancel()
   speechSynthesis.speak(u)

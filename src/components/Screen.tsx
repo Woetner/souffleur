@@ -1,9 +1,10 @@
 import { motion } from 'framer-motion'
-import type { ReactNode } from 'react'
+import { useRef, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Icon from './Icon'
 
 export function Screen({ children, className = '' }: { children: ReactNode; className?: string }) {
+  const ref = useRef<HTMLElement>(null)
   return (
     <motion.main
       className={`screen ${className}`}
@@ -11,6 +12,11 @@ export function Screen({ children, className = '' }: { children: ReactNode; clas
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -24 }}
       transition={{ duration: 0.25, ease: [0.2, 0.8, 0.2, 1] }}
+      // A leftover transform would turn position:fixed children (control bars) into page-relative ones
+      onAnimationComplete={() => {
+        if (ref.current && ref.current.isConnected) ref.current.style.transform = 'none'
+      }}
+      ref={ref}
     >
       {children}
     </motion.main>
